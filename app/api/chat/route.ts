@@ -33,11 +33,20 @@ export async function POST(request: NextRequest) {
 
     // Default response for unclassified queries
     return NextResponse.json({ response: 'I could not classify your query.' });
-  } catch (error) {
-    console.error('API Error:', error);
-    return NextResponse.json(
-      { error: 'Failed to process the request' },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    // Handle unknown error type
+    if (error instanceof Error) {
+      console.error('API Error:', error.message);
+      return NextResponse.json(
+        { error: `Failed to process the request: ${error.message}` },
+        { status: 500 }
+      );
+    } else {
+      console.error('Unexpected error:', error);
+      return NextResponse.json(
+        { error: 'An unexpected error occurred' },
+        { status: 500 }
+      );
+    }
   }
 }

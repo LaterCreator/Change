@@ -2,6 +2,7 @@ async function fetchData(queryType: string): Promise<void> {
   let endpoint = '';
   
   // Map general queries to corresponding API endpoints
+
   switch (queryType) {
     case 'population':
       endpoint = 'population';
@@ -45,3 +46,16 @@ async function fetchData(queryType: string): Promise<void> {
 
 // Example usage: Query population data
 fetchData('population');  // You can replace 'population' with 'income', 'health', etc.
+// lib/api-utils.ts
+
+// Example of a named export
+export async function fetchPubMedData(query: string) {
+  // Implement your logic for fetching PubMed data here
+  return { data: `PubMed result for ${query}` };  // Example data
+}
+
+// Another example of a named export
+export async function fetchOWIDData(query: string) {
+  // Implement your logic for fetching OWID data here
+  return { data: `OWID result for ${query}` };  // Example data
+}
