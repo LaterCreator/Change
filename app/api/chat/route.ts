@@ -1,52 +1,70 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { checkRateLimit } from '@/lib/rate-limit';
-import { fetchPubMedData, fetchOWIDData } from '@/lib/api-utils';
-import { classifyQuery } from '@/lib/nlp';
+import { OpenAI } from 'openai';
+import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 
-export async function POST(request: NextRequest) {
-  const ip = request.headers.get('x-forwarded-for') || 'unknown';
+// Initialize OpenAI (or your preferred AI service)
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
 
-  // Apply rate limiting
-  if (!checkRateLimit(ip)) {
-    return NextResponse.json(
-      { error: 'Rate limit exceeded' },
-      { status: 429 }
-    );
+// Define your sources here (you can expand this)
+const SOURCES = [
+  { 
+    type: 'text', 
+    content: 'Your company information goes here...' 
+  },
+  { 
+    type: 'document', 
+    path: '/path/to/your/document.txt' 
   }
+];
 
-  const { message } = await request.json();
-
-  // Classify the query
-  const source = classifyQuery(message);
-
+export async function POST(req: NextRequest) {
   try {
-    // Fetch data based on classification
-    if (source === 'pubmed') {
-      const data = await fetchPubMedData(message);
-      return NextResponse.json({ response: `PubMed result: ${JSON.stringify(data)}` });
-    }
+    const { messages, sources = [] } = await req.json();
 
-    if (source === 'owid') {
-      const data = await fetchOWIDData('vaccinations');
-      return NextResponse.json({ response: `OWID result: ${JSON.stringify(data)}` });
-    }
+    // Combine static and dynamic sources
+    const combinedSources = [...SOURCES, ...sources];
 
-    // Default response for unclassified queries
-    return NextResponse.json({ response: 'I could not classify your query.' });
-  } catch (error: unknown) {
-    // Handle unknown error type
-    if (error instanceof Error) {
-      console.error('API Error:', error.message);
-      return NextResponse.json(
-        { error: `Failed to process the request: ${error.message}` },
-        { status: 500 }
-      );
-    } else {
-      console.error('Unexpected error:', error);
-      return NextResponse.json(
-        { error: 'An unexpected error occurred' },
-        { status: 500 }
-      );
-    }
+    // Prepare context from sources
+    const sourceContext = combinedSources
+      .map(source => 
+        source.type === 'text' ? source.content : 
+        source.type === 'document' ? `Document source: ${source.path}` : ''
+      )
+      .join('\n\n');
+
+    // Prepare messages for AI
+    const formattedMessages: ChatCompletionMessageParam[] = [
+      {
+        role: 'system',
+        content: `You are a helpful assistant. Use the following sources as context for your responses:\n${sourceContext}`
+      },
+      ...messages.map((msg: any) => ({
+        role: msg.role,
+        content: msg.content
+      }))
+    ];
+
+    // Call OpenAI (or your preferred AI service)
+    const response = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      messages: formattedMessages,
+      max_tokens: 300
+    });
+
+    const aiMessage = response.choices[0].message.content || 'No response generated.';
+
+    return NextResponse.json({ 
+      message: aiMessage,
+      sources: combinedSources 
+    });
+
+  } catch (error) {
+    console.error('Chat API Error:', error);
+    return NextResponse.json(
+      { error: 'Failed to process chat request' }, 
+      { status: 500 }
+    );
   }
 }
