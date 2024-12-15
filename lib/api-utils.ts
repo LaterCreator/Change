@@ -1,31 +1,47 @@
-export async function fetchPubMedData(query: string) {
-    const apiKey = process.env.PUBMED_API_KEY; // Ensure this is set in your `.env` file.
-    const url = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${encodeURIComponent(query)}&retmode=json&api_key=${apiKey}`;
+async function fetchData(queryType: string): Promise<void> {
+  let endpoint = '';
   
-    try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error('Failed to fetch PubMed data');
-      }
-      return await response.json();
-    } catch (error) {
-      console.error('PubMed API Error:', error);
-      throw error;
+  // Map general queries to corresponding API endpoints
+  switch (queryType) {
+    case 'population':
+      endpoint = 'population';
+      break;
+    case 'income':
+      endpoint = 'income';
+      break;
+    case 'health':
+      endpoint = 'health';
+      break;
+    case 'education':
+      endpoint = 'education';
+      break;
+    default:
+      console.error('Unknown query type');
+      return;
+  }
+
+  // Attempt to fetch data
+  try {
+    const response = await fetch(`https://api.ourworldindata.org/v1/indicator/${endpoint}`);
+    
+    if (!response.ok) {
+      console.error(`HTTP error! Status: ${response.status}`);
+      throw new Error('Failed to fetch data');
+    }
+
+    // Parse and log the data if successful
+    const data = await response.json();
+    console.log(data);  // Process and display the data
+
+  } catch (error: unknown) {
+    // TypeScript requires type assertion for error
+    if (error instanceof Error) {
+      console.error('Error fetching data:', error.message);
+    } else {
+      console.error('An unknown error occurred');
     }
   }
-  
-  export async function fetchOWIDData(dataset: string) {
-    const url = `https://ourworldindata.org/${encodeURIComponent(dataset)}.json`;
-  
-    try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error('Failed to fetch OWID data');
-      }
-      return await response.json();
-    } catch (error) {
-      console.error('OWID API Error:', error);
-      throw error;
-    }
-  }
-  
+}
+
+// Example usage: Query population data
+fetchData('population');  // You can replace 'population' with 'income', 'health', etc.
