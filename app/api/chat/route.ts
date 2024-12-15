@@ -1,28 +1,42 @@
-import { HfInference } from '@huggingface/inference';
 import { NextRequest, NextResponse } from 'next/server';
-
-const hf = new HfInference(process.env.HUGGINGFACE_API_KEY);
+import { checkRateLimit } from '@/lib/rate-limit';
+import { fetchPubMedData, fetchOWIDData } from '@/lib/api-utils';
+import { classifyQuery } from '@/lib/nlp';
 
 export async function POST(request: NextRequest) {
-  try {
-    // Parse the incoming request JSON body
-    const { message } = await request.json();
+  const ip = request.headers.get('x-forwarded-for') || 'unknown';
 
-    // Use the textGeneration method for response
-    const response = await hf.textGeneration({
-      model: 'facebook/blenderbot-400M-distill',
-      inputs: message,
-    });
-
-    // Send the generated response back as JSON
-    return NextResponse.json({
-      response: response.generated_text
-    });
-  } catch (error) {
-    // Log and handle errors gracefully
-    console.error('Hugging Face API error:', error);
+  // Apply rate limiting
+  if (!checkRateLimit(ip)) {
     return NextResponse.json(
-      { error: 'Failed to process request' }, 
+      { error: 'Rate limit exceeded' },
+      { status: 429 }
+    );
+  }
+
+  const { message } = await request.json();
+
+  // Classify the query
+  const source = classifyQuery(message);
+
+  try {
+    // Fetch data based on classification
+    if (source === 'pubmed') {
+      const data = await fetchPubMedData(message);
+      return NextResponse.json({ response: `PubMed result: ${JSON.stringify(data)}` });
+    }
+
+    if (source === 'owid') {
+      const data = await fetchOWIDData('vaccinations');
+      return NextResponse.json({ response: `OWID result: ${JSON.stringify(data)}` });
+    }
+
+    // Default response for unclassified queries
+    return NextResponse.json({ response: 'I could not classify your query.' });
+  } catch (error) {
+    console.error('API Error:', error);
+    return NextResponse.json(
+      { error: 'Failed to process the request' },
       { status: 500 }
     );
   }
