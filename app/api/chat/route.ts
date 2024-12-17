@@ -1,70 +1,31 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { OpenAI } from 'openai';
-import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import axios from 'axios';
 
-// Initialize OpenAI (or your preferred AI service)
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
-
-// Define your sources here (you can expand this)
-const SOURCES = [
-  { 
-    type: 'text', 
-    content: 'Your company information goes here...' 
-  },
-  { 
-    type: 'document', 
-    path: '/path/to/your/document.txt' 
-  }
-];
-
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
-    const { messages, sources = [] } = await req.json();
+    const body = await req.json();  // Parse the request body
+    const userInput = body.input;   // Extract input text from the body
 
-    // Combine static and dynamic sources
-    const combinedSources = [...SOURCES, ...sources];
+    const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY;
 
-    // Prepare context from sources
-    const sourceContext = combinedSources
-      .map(source => 
-        source.type === 'text' ? source.content : 
-        source.type === 'document' ? `Document source: ${source.path}` : ''
-      )
-      .join('\n\n');
+    if (!HUGGINGFACE_API_KEY) {
+      return Response.json({ error: "API key is missing" }, { status: 500 });
+    }
 
-    // Prepare messages for AI
-    const formattedMessages: ChatCompletionMessageParam[] = [
+    // Set up the API request to Hugging Face
+    const response = await axios.post(
+      'https://api-inference.huggingface.co/models/gpt2',  // Use a model of your choice
+      { inputs: userInput },  // Input text to the model
       {
-        role: 'system',
-        content: `You are a helpful assistant. Use the following sources as context for your responses:\n${sourceContext}`
-      },
-      ...messages.map((msg: any) => ({
-        role: msg.role,
-        content: msg.content
-      }))
-    ];
-
-    // Call OpenAI (or your preferred AI service)
-    const response = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
-      messages: formattedMessages,
-      max_tokens: 300
-    });
-
-    const aiMessage = response.choices[0].message.content || 'No response generated.';
-
-    return NextResponse.json({ 
-      message: aiMessage,
-      sources: combinedSources 
-    });
-
-  } catch (error) {
-    console.error('Chat API Error:', error);
-    return NextResponse.json(
-      { error: 'Failed to process chat request' }, 
-      { status: 500 }
+        headers: {
+          Authorization: `Bearer ${HUGGINGFACE_API_KEY}`,
+        },
+      }
     );
+
+    // Return the generated text from the model as the response
+    return Response.json({ result: response.data });
+  } catch (error) {
+    console.error("Hugging Face API Error:", error);
+    return Response.json({ error: "Failed to generate text" }, { status: 500 });
   }
 }
